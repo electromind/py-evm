@@ -5,7 +5,7 @@ from p2p.tools.local_network import Address
 
 
 @pytest.mark.asyncio
-async def test_router_connected_readers(router):
+async def test_router_produces_connected_readers(router):
     address = Address('tcp', '192.168.1.1', 1234)
     reader, writer = router.get_connected_readers(address)
 
@@ -17,30 +17,28 @@ async def test_router_connected_readers(router):
 
 
 @pytest.mark.asyncio
-async def test_server_connection_callback(router):
-    n1 = router.get_network('192.168.1.1')
-    n2 = router.get_network('192.168.1.2')
+async def test_connection_refused_if_no_running_server(router):
+    with pytest.raises(ConnectionRefusedError):
+        await router.open_connection('192.168.1.1', 30303)
 
+
+@pytest.mark.asyncio
+async def test_server_connection_callback(router):
     was_run = asyncio.Event()
 
     async def cb(reader, writer):
         nonlocal was_run
         was_run.set()
 
-    await asyncio.wait_for(n2.start_server(cb, n2.host, 1234), timeout=0.01)
-
-    await asyncio.wait_for(n1.open_connection(n2.host, 1234), timeout=0.01)
-
+    await asyncio.wait_for(router.start_server(cb, '192.168.1.1', 1234), timeout=0.01)
+    await asyncio.wait_for(router.open_connection('192.168.1.1', 1234), timeout=0.01)
     await asyncio.wait_for(was_run.wait(), timeout=0.1)
 
     assert was_run.is_set()
 
 
 @pytest.mark.asyncio
-async def test_arst_server_client_communication(router):
-    n1 = router.get_network('192.168.1.1')
-    n2 = router.get_network('192.168.1.2')
-
+async def test_server_client_communication(router):
     was_run = asyncio.Event()
 
     server_reader, server_writer = None, None
@@ -54,9 +52,9 @@ async def test_arst_server_client_communication(router):
         await asyncio.sleep(0)
         was_run.set()
 
-    await n2.start_server(cb, n2.host, 1234)
+    await router.start_server(cb, '192.168.1.1', 1234)
 
-    client_reader, client_writer = await n1.open_connection(n2.host, 1234)
+    client_reader, client_writer = await router.open_connection('192.168.1.1', 1234)
 
     await asyncio.wait_for(was_run.wait(), timeout=0.1)
 

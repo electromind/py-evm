@@ -165,14 +165,11 @@ class Network:
                 break
         return port
 
-    async def start_server(self, client_connected_cb, host, port) -> Server:
-        if host != self.host:
-            raise ValueError('Host mismatch.  expected: {0} | got: {1}'.format(self.host, host))
-
+    async def start_server(self, client_connected_cb, port) -> Server:
         if port in self.servers:
             raise OSError('Address already in use')
 
-        address = Address('tcp', host, port)
+        address = Address('tcp', self.host, port)
 
         server = Server(client_connected_cb, address, self)
         self.servers[port] = server
@@ -259,11 +256,8 @@ class Router(BaseService):
     # Asyncio API
     #
     async def start_server(self, client_connected_cb, host, port) -> Server:
-        address = Address('tcp', host, port)
         network = self.get_network(host)
-        server = Server(client_connected_cb, address, network)
-        network.servers[port] = server
-        return server
+        return network.start_server(client_connected_cb, port)
 
     async def open_connection(self, host, port) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         network = self.get_network(self.default_host)
@@ -280,8 +274,9 @@ class Router(BaseService):
     async def _cleanup(self):
         # all of the cancel tokens *should* be triggered already so we just
         # wait for the networking processes to complete.
-        await asyncio.wait(
-            self.connections.values(),
-            timeout=1,
-            return_when=asyncio.ALL_COMPLETED
-        )
+        if self.connections:
+            await asyncio.wait(
+                self.connections.values(),
+                timeout=1,
+                return_when=asyncio.ALL_COMPLETED
+            )
