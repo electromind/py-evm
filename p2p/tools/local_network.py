@@ -268,7 +268,11 @@ class Router(BaseService):
 
     async def open_connection(self, host, port) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         network = self.get_network(self.default_host)
-        return await network.open_connection(host, port)
+        try:
+            return await network.open_connection(host, port)
+        except ConnectionRefusedError as err:
+            catch_all_network = self.get_network('0.0.0.0')
+            return await catch_all_network.open_connection(host, port)
 
     async def _run(self):
         while not self.cancel_token.triggered:

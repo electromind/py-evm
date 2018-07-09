@@ -26,6 +26,7 @@ from p2p.exceptions import (
     DecryptionError,
     HandshakeFailure,
 )
+from p2p import network
 from p2p.utils import (
     sxor,
 )
@@ -41,9 +42,6 @@ from .constants import (
     SIGNATURE_LEN,
     SUPPORTED_RLPX_VERSION,
 )
-
-
-logger = logging.getLogger('p2p.testing')
 
 
 async def handshake(
@@ -104,13 +102,19 @@ class HandshakeBase:
     _is_initiator = False
 
     def __init__(
-            self, remote: kademlia.Node, privkey: datatypes.PrivateKey,
-            use_eip8: bool, token: CancelToken) -> None:
+            self,
+            remote: kademlia.Node,
+            privkey: datatypes.PrivateKey,
+            use_eip8: bool,
+            token: CancelToken,
+            network=None) -> None:
         self.remote = remote
         self.privkey = privkey
         self.ephemeral_privkey = ecies.generate_privkey()
         self.use_eip8 = use_eip8
         self.cancel_token = token
+        if network is not None:
+            self._network = network
 
     @property
     def ephemeral_pubkey(self) -> datatypes.PublicKey:
@@ -125,13 +129,11 @@ class HandshakeBase:
     @property
     def network(self):
         if self._network is None:
-            from p2p.tools import network
-            self._network = network.router.get_network('127.0.0.1')
+            self._network = network.get_network()
         return self._network
 
     async def connect(self) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         return await wait_with_token(
-            #asyncio.open_connection(host=self.remote.address.ip, port=self.remote.address.tcp_port),
             self.network.open_connection(host=self.remote.address.ip, port=self.remote.address.tcp_port),
             token=self.cancel_token,
             timeout=REPLY_TIMEOUT)

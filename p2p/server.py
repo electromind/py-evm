@@ -48,6 +48,7 @@ from p2p.kademlia import (
     Node,
 )
 from p2p.nat import UPnPService
+from p2p import network
 from p2p.p2p_proto import (
     DisconnectReason,
 )
@@ -116,13 +117,11 @@ class Server(BaseService):
     @property
     def network(self):
         if self._network is None:
-            from p2p.tools import network
-            self._network = network.router.get_network(self.host)
+            self._network = network.get_network()
         return self._network
 
     async def _start_tcp_listener(self) -> None:
         # TODO: Support IPv6 addresses as well.
-        #self._tcp_listener = await asyncio.start_server(
         self._tcp_listener = await self.network.start_server(
             self.receive_handshake,
             host=self.host,
@@ -207,7 +206,6 @@ class Server(BaseService):
             HandshakeFailure,
             asyncio.IncompleteReadError,
         )
-        self.logger.info('GOT HANDSHAKE')
         try:
             await self._receive_handshake(reader, writer)
         except expected_exceptions as e:
@@ -219,14 +217,11 @@ class Server(BaseService):
 
     async def _receive_handshake(
             self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        self.logger.info('READING AUTH MSG')
         msg = await self.wait(
             reader.read(ENCRYPTED_AUTH_MSG_LEN),
             timeout=REPLY_TIMEOUT)
 
-        self.logger.info('BEFORE_EXTRA_INFO')
         ip, socket, *_ = writer.get_extra_info("peername")
-        self.logger.info('AFTER_EXTRA_INFO')
         remote_address = Address(ip, socket)
         self.logger.debug("Receiving handshake from %s", remote_address)
         got_eip8 = False
@@ -257,7 +252,6 @@ class Server(BaseService):
 
         # Use the `writer` to send the reply to the remote
         writer.write(auth_ack_ciphertext)
-        self.logger.info('HERER!!!!!')
         await self.wait(writer.drain())
 
         # Call `HandshakeResponder.derive_shared_secrets()` and use return values to create `Peer`
