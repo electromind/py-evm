@@ -107,11 +107,9 @@ async def test_server_authenticates_incoming_connections(monkeypatch, server, ev
     # incoming connections.
     monkeypatch.setattr(server, 'peer_pool', MockPeerPool())
 
-    network = router.get_network('127.0.0.1')
-
     # Send auth init message to the server.
     reader, writer = await asyncio.wait_for(
-        network.open_connection(SERVER_ADDRESS.ip, SERVER_ADDRESS.tcp_port),
+        router.open_connection(SERVER_ADDRESS.ip, SERVER_ADDRESS.tcp_port),
         timeout=1)
     writer.write(eip8_values['auth_init_ciphertext'])
     await asyncio.wait_for(writer.drain(), timeout=1)

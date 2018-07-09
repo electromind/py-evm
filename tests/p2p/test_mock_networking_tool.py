@@ -27,11 +27,13 @@ async def test_server_connection_callback(router):
         nonlocal was_run
         was_run.set()
 
-    await n2.start_server(cb, n2.host, 1234)
+    await asyncio.wait_for(n2.start_server(cb, n2.host, 1234), timeout=0.01)
 
-    await n1.open_connection(n2.host, 1234)
+    await asyncio.wait_for(n1.open_connection(n2.host, 1234), timeout=0.01)
 
-    asyncio.wait_for(was_run.wait(), timeout=0.1)
+    await asyncio.wait_for(was_run.wait(), timeout=0.1)
+
+    assert was_run.is_set()
 
 
 @pytest.mark.asyncio
@@ -62,11 +64,11 @@ async def test_arst_server_client_communication(router):
     assert server_writer is not None
 
     client_writer.write(b'arst')
-    server_data = await server_reader.read(4)
+    server_data = await asyncio.wait_for(server_reader.read(4), timeout=0.01)
 
     assert server_data == b'arst'
 
     server_writer.write(b'tsra')
-    client_data = await client_reader.read(4)
+    client_data = await asyncio.wait_for(client_reader.read(4), timeout=0.01)
 
     assert client_data == b'tsra'

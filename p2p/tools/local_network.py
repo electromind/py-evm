@@ -152,7 +152,7 @@ class Network:
         try:
             return self.servers[port]
         except KeyError:
-            raise Exception("No server running at {0}".format(port))
+            raise ConnectionRefusedError("No server running at {0}:{1}".format(self.host, port))
 
     def get_open_port(self):
         while True:
@@ -167,35 +167,34 @@ class Network:
 
     async def start_server(self, client_connected_cb, host, port) -> Server:
         if host != self.host:
-            raise Exception('host mismatch')
+            raise ValueError('Host mismatch.  expected: {0} | got: {1}'.format(self.host, host))
+
+        if port in self.servers:
+            raise OSError('Address already in use')
 
         address = Address('tcp', host, port)
 
-        if address in self.servers:
-            raise Exception('already running a server')
-
         server = Server(client_connected_cb, address, self)
-        self.servers[address] = server
+        self.servers[port] = server
         return server
 
     def receive_connection(self, port) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         address = Address('tcp', self.host, port)
-        if address not in self.servers:
-            raise Exception('no running server')
+        if port not in self.servers:
+            raise ConnectionRefusedError("No server running at {0}:{1}".format(self.host, port))
         if address.port in self.connections:
-            raise Exception('port in use for outgoing connection')
+            raise OSError('Address already in use')
 
         reader, writer = self.router.get_connected_readers(address)
         return reader, writer
 
     async def open_connection(self, host, port) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-        to_network = self.router.get_network(host)
+        if port in self.connections:
+            raise OSError('already connected')
 
         to_address = Address('tcp', host, port)
 
-        if to_address in self.connections:
-            raise Exception('already connected')
-
+        to_network = self.router.get_network(host)
         client_reader, server_writer = to_network.receive_connection(port)
 
         from_port = self.get_open_port()
@@ -204,7 +203,7 @@ class Network:
         server_reader, client_writer = self.router.get_connected_readers(from_address)
         self.connections[from_port] = to_address
 
-        server = to_network.get_server(to_address)
+        server = to_network.get_server(port)
         asyncio.ensure_future(server.client_connected_cb(server_reader, server_writer))
 
         return client_reader, client_writer
@@ -263,7 +262,7 @@ class Router(BaseService):
         address = Address('tcp', host, port)
         network = self.get_network(host)
         server = Server(client_connected_cb, address, network)
-        network.servers[address] = server
+        network.servers[port] = server
         return server
 
     async def open_connection(self, host, port) -> Tuple[asyncio.StreamReader, asyncio.StreamWriter]:
@@ -272,7 +271,7 @@ class Router(BaseService):
             return await network.open_connection(host, port)
         except ConnectionRefusedError as err:
             catch_all_network = self.get_network('0.0.0.0')
-            return await catch_all_network.open_connection(host, port)
+            return await catch_all_network.open_connection('0.0.0.0', port)
 
     async def _run(self):
         while not self.cancel_token.triggered:
